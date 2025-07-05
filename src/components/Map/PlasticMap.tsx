@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import L from 'leaflet'
-import { MapContainer, TileLayer, Circle, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Circle, Popup, useMap } from 'react-leaflet'
 import { supabase } from '../../lib/supabase'
+import { MapPin } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
 // Fix Leaflet icon issue
@@ -23,19 +24,58 @@ interface Detection {
   created_at: string
 }
 
+// Component to handle map controls
+function MapControls() {
+  const map = useMap()
+  
+  const centerOnMyLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          map.flyTo([latitude, longitude], 12, {
+            duration: 2
+          })
+        },
+        (error) => {
+          console.error('Location error:', error)
+          alert('Could not get your location. Please enable GPS.')
+        }
+      )
+    } else {
+      alert('Geolocation is not supported by your browser')
+    }
+  }
+
+  return (
+    <>
+      {/* My Location Button */}
+      <div className="absolute top-4 left-4 bg-white p-2 rounded shadow-lg z-[1000]">
+        <button
+          onClick={centerOnMyLocation}
+          className="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+          title="Center map on my location"
+        >
+          <MapPin size={20} />
+          <span className="text-sm font-medium">My Location</span>
+        </button>
+      </div>
+    </>
+  )
+}
+
 export default function PlasticMap() {
   const [detections, setDetections] = useState<Detection[]>([])
   const [loading, setLoading] = useState(true)
-  const [mapKey, setMapKey] = useState(0)
 
   useEffect(() => {
     // Load immediately
     loadDetections()
     
-    // Reload every 2 seconds
+    // Reload every 5 seconds
     const interval = setInterval(() => {
       loadDetections()
-    }, 2000)
+    }, 5000)
 
     return () => clearInterval(interval)
   }, [])
@@ -48,7 +88,7 @@ export default function PlasticMap() {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50)
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours only
+        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()) // Last 7 days
 
       if (error) {
         console.error('Supabase error:', error)
@@ -56,7 +96,6 @@ export default function PlasticMap() {
       }
 
       console.log(`Loaded ${data?.length} detections at ${new Date().toLocaleTimeString()}`)
-      console.log('Latest detection:', data?.[0])
 
       if (data) {
         const parsed = data.map(d => ({
@@ -65,7 +104,6 @@ export default function PlasticMap() {
         }))
         
         setDetections(parsed)
-        setMapKey(prev => prev + 1) // Force re-render
       }
     } catch (error) {
       console.error('Error:', error)
@@ -110,15 +148,20 @@ export default function PlasticMap() {
   return (
     <div className="relative">
       <MapContainer
-        key={mapKey}
-        center={[-6.2088, 106.8456]}
-        zoom={12}
+        center={[20, 0]}  // Center of world
+        zoom={3}           // Zoomed out to see all continents
         className="h-[600px] w-full"
+        scrollWheelZoom={true}
+        doubleClickZoom={true}
+        zoomControl={true}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; OpenStreetMap contributors'
         />
+
+        {/* Add the controls component inside MapContainer */}
+        <MapControls />
 
         {detections.map((detection, index) => {
           const color = getSeverityColor(detection.severity)
@@ -132,7 +175,7 @@ export default function PlasticMap() {
                 detection.location.lat + offset,
                 detection.location.lng + offset
               ]}
-              radius={500}
+              radius={50000}  // 50km radius for world view
               pathOptions={{
                 fillColor: color,
                 fillOpacity: 0.7,
@@ -150,6 +193,9 @@ export default function PlasticMap() {
                   </p>
                   <p className="text-sm text-gray-600 mb-2">
                     <strong>Time:</strong> {new Date(detection.created_at).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    <strong>Location:</strong> {detection.location.lat.toFixed(4)}, {detection.location.lng.toFixed(4)}
                   </p>
                   
                   {detection.image_url && (
@@ -171,32 +217,33 @@ export default function PlasticMap() {
             </Circle>
           )
         })}
-      </MapContainer>
 
-      {/* Data status */}
-      <div className="absolute top-4 right-4 bg-white p-3 rounded shadow-lg z-[1000]">
-        <p className="text-sm font-semibold">{detections.length} Detections</p>
-        <p className="text-xs text-gray-600">Updates every 2s</p>
-      </div>
+        {/* Data status - moved to top right */}
+        <div className="absolute top-4 right-4 bg-white p-3 rounded shadow-lg z-[1000]">
+          <p className="text-sm font-semibold">{detections.length} Detections</p>
+          <p className="text-xs text-gray-600">Updates every 5s</p>
+          <p className="text-xs text-gray-500 mt-1">Last 7 days</p>
+        </div>
 
-      {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-white p-3 rounded shadow-lg z-[1000]">
-        <h4 className="font-bold mb-2 text-sm">Severity</h4>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-600"></div>
-            <span className="text-xs">High</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-            <span className="text-xs">Medium</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-            <span className="text-xs">Low</span>
+        {/* Legend - stays at bottom left */}
+        <div className="absolute bottom-4 left-4 bg-white p-3 rounded shadow-lg z-[1000]">
+          <h4 className="font-bold mb-2 text-sm">Severity</h4>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-red-600"></div>
+              <span className="text-xs">High</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+              <span className="text-xs">Medium</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              <span className="text-xs">Low</span>
+            </div>
           </div>
         </div>
-      </div>
+      </MapContainer>
     </div>
   )
 }
