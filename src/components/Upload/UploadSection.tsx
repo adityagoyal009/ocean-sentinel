@@ -78,7 +78,7 @@ export default function UploadSection({ onUploadSuccess }: Props) {
 
           // Show what AI found
           if (detection.objects.length > 0) {
-            const objects = detection.objects.map(obj => obj.class).join(', ')
+            const objects = detection.objects.join(', ')
             toast.success(`AI detected: ${objects}`, { duration: 4000 })
           } else if (detection.plasticScore > 0.3) {
             toast.success('AI detected potential plastic pollution', { duration: 4000 })
