@@ -6,11 +6,13 @@ import UploadSection from '../src/components/Upload/UploadSection'
 import StatsDisplay from '../src/components/Dashboard/StatsDisplay'
 
 // Load map dynamically to avoid SSR issues with Leaflet
-const PlasticMap = dynamic(() => import('../src/components/Map/PlasticMap'), {
-  ssr: false,
-  loading: () => <div className="w-full h-[600px] bg-gray-100 animate-pulse" />
-})
-
+const PlasticMap = dynamic(
+  () => import('../src/components/Map/PlasticMap'),
+  { 
+    ssr: false,
+    loading: () => <div className="w-full h-[600px] bg-gray-100 animate-pulse">Loading map...</div>
+  }
+)
 export default function Home() {
   const [refreshMap, setRefreshMap] = useState(0)
 
