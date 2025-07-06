@@ -21,28 +21,40 @@ export default function UploadSection({ onUploadSuccess }: Props) {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setLocation({
+          const newLocation = {
             lat: position.coords.latitude,
             lng: position.coords.longitude
-          })
-          toast.success('Location captured!')
+          }
+          setLocation(newLocation)
+          console.log('GPS Location captured:', newLocation)
+          toast.success(`Location captured: ${newLocation.lat.toFixed(6)}, ${newLocation.lng.toFixed(6)}`)
         },
         (error) => {
+          console.error('GPS Error:', error)
           // Fallback to a test location for development
-          setLocation({
+          const testLocation = {
             lat: -6.2088,  // Jakarta Bay
             lng: 106.8456
-          })
-          toast.success('Using test location (Jakarta Bay)')
+          }
+          setLocation(testLocation)
+          console.log('Using test location:', testLocation)
+          toast.error('GPS failed - using test location (Jakarta Bay)')
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
         }
       )
     } else {
       // Fallback for browsers without geolocation
-      setLocation({
+      const testLocation = {
         lat: -6.2088,
         lng: 106.8456
-      })
-      toast.success('Using test location (Jakarta Bay)')
+      }
+      setLocation(testLocation)
+      console.log('No GPS support - using test location:', testLocation)
+      toast.error('GPS not supported - using test location (Jakarta Bay)')
     }
   }
 
@@ -54,6 +66,11 @@ export default function UploadSection({ onUploadSuccess }: Props) {
       toast.error('Please capture your location first')
       return
     }
+
+    // Log current location before upload
+    console.log('=== UPLOAD STARTING ===')
+    console.log('Current location state:', location)
+    console.log('Location string will be:', `POINT(${location.lng} ${location.lat})`)
 
     setUploading(true)
     const toastId = toast.loading('AI is analyzing image for plastic...')
@@ -118,6 +135,18 @@ export default function UploadSection({ onUploadSuccess }: Props) {
 
       console.log('Image uploaded successfully:', publicUrl)
 
+      // CRITICAL: Log location right before database save
+      console.log('=== SAVING TO DATABASE ===')
+      console.log('Location being saved:', location)
+      console.log('PostGIS string:', `POINT(${location.lng} ${location.lat})`)
+      
+      // Double-check location hasn't changed
+      if (location.lat === -6.2088 && location.lng === 106.8456) {
+        console.warn('WARNING: Saving Jakarta test location!')
+      } else {
+        console.log('SUCCESS: Saving actual GPS location!')
+      }
+
       // Save to database with AI results
       const { data, error: dbError } = await supabase
         .from('plastic_detections')
@@ -138,6 +167,7 @@ export default function UploadSection({ onUploadSuccess }: Props) {
       }
 
       console.log('Detection saved successfully:', data)
+      console.log('Saved location was:', `POINT(${location.lng} ${location.lat})`)
       
       // Show result with emojis
       const severityEmoji = {
@@ -153,7 +183,8 @@ export default function UploadSection({ onUploadSuccess }: Props) {
       
       // Reset form
       if (fileInputRef.current) fileInputRef.current.value = ''
-      setLocation(null)
+      // Don't reset location - keep it for next upload
+      // setLocation(null)
       setDetectionPreview(null)
       
       // Trigger map refresh
@@ -194,12 +225,22 @@ export default function UploadSection({ onUploadSuccess }: Props) {
             className="w-full flex items-center justify-center gap-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium py-4 px-6 rounded-lg transition"
           >
             <MapPin size={24} />
-            {location ? 'Location Captured ✓' : 'Capture Current Location'}
+            {location ? 'Location Captured ✓ (Click to update)' : 'Capture Current Location'}
           </button>
           {location && (
-            <p className="text-sm text-gray-600 mt-2">
-              📍 {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
-            </p>
+            <div className="mt-2 p-3 bg-gray-50 rounded-md">
+              <p className="text-sm text-gray-600">
+                📍 Latitude: {location.lat.toFixed(6)}
+              </p>
+              <p className="text-sm text-gray-600">
+                📍 Longitude: {location.lng.toFixed(6)}
+              </p>
+              {(location.lat === -6.2088 && location.lng === 106.8456) && (
+                <p className="text-xs text-orange-600 mt-1">
+                  ⚠️ Using test location (Jakarta Bay)
+                </p>
+              )}
+            </div>
           )}
         </div>
 
