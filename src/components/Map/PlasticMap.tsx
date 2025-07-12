@@ -113,15 +113,34 @@ export default function PlasticMap() {
   }
 
   const parseLocation = (geoData: any) => {
-    if (typeof geoData === 'string' && geoData.includes('POINT')) {
-      const matches = geoData.match(/POINT\(([^ ]+) ([^ ]+)\)/)
-      if (matches) {
+    // Supabase can return geometry either as WKT strings
+    // like "POINT(lng lat)" or as GeoJSON objects. Support both
+    if (geoData) {
+      // GeoJSON format
+      if (
+        typeof geoData === 'object' &&
+        geoData.type === 'Point' &&
+        Array.isArray(geoData.coordinates)
+      ) {
         return {
-          lng: parseFloat(matches[1]),
-          lat: parseFloat(matches[2])
+          lng: Number(geoData.coordinates[0]),
+          lat: Number(geoData.coordinates[1])
+        }
+      }
+
+      // WKT format
+      if (typeof geoData === 'string' && geoData.includes('POINT')) {
+        const matches = geoData.match(/POINT\(([^ ]+) ([^ ]+)\)/)
+        if (matches) {
+          return {
+            lng: parseFloat(matches[1]),
+            lat: parseFloat(matches[2])
+          }
         }
       }
     }
+
+    // Fallback to a test location if parsing fails
     return { lat: -6.2088, lng: 106.8456 }
   }
 
